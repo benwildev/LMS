@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  outputFileTracingIncludes: {
+    "/**": [
+      "./node_modules/.prisma/client/**/*",
+      "./node_modules/@prisma/client/**/*",
+    ],
+  },
   experimental: {
     serverComponentsExternalPackages: ["@prisma/client", "@prisma/adapter-pg", "pg"],
     // Course materials are uploaded through a server action.
