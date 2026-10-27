@@ -1,0 +1,194 @@
+// The Biology Universe — PostgreSQL schema.
+// Apply it with:  npx prisma migrate deploy   (or `npx prisma db push` while developing)
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters", "queryCompiler"]
+  engineType      = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  student
+}
+
+enum PaymentStatus {
+  pending
+  approved
+  rejected
+}
+
+model User {
+  id           Int              @id @default(autoincrement())
+  name         String
+  email        String           @unique
+  phone        String           @default("")
+  passwordHash String           @map("password_hash")
+  role         Role             @default(student)
+  createdAt    DateTime         @default(now()) @map("created_at")
+  payments     Payment[]
+  enrollments  Enrollment[]
+  progress     LessonProgress[]
+
+  @@map("users")
+}
+
+model Course {
+  id           Int          @id @default(autoincrement())
+  slug         String       @unique
+  title        String
+  subtitle     String       @default("")
+  description  String       @default("")
+  price        Int          @default(0)
+  thumbnailUrl String       @default("") @map("thumbnail_url")
+  previewUrl   String       @default("") @map("preview_url")
+  level        String       @default("")
+  language     String       @default("")
+  category     String       @default("")
+  instructor   String       @default("")
+  comparePrice Int          @default(0) @map("compare_price")
+  published    Boolean      @default(false)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  lessons      Lesson[]
+  payments     Payment[]
+  enrollments  Enrollment[]
+  liveClasses  LiveClass[]
+  materials    Material[]
+
+  @@index([published, createdAt])
+  @@map("courses")
+}
+
+model Lesson {
+  id          Int              @id @default(autoincrement())
+  courseId    Int              @map("course_id")
+  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  description String           @default("")
+  videoUrl    String           @default("") @map("video_url")
+  durationMin Int              @default(0) @map("duration_min")
+  position    Int              @default(0)
+  isPreview   Boolean          @default(false) @map("is_preview")
+  passPercent Int              @default(70) @map("pass_percent")
+  questions   Question[]
+  progress    LessonProgress[]
+  materials   Material[]
+
+  @@index([courseId, position])
+  @@map("lessons")
+}
+
+model Question {
+  id           Int      @id @default(autoincrement())
+  lessonId     Int      @map("lesson_id")
+  lesson       Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  prompt       String
+  options      String[]
+  correctIndex Int      @map("correct_index")
+  explanation  String   @default("")
+  position     Int      @default(0)
+
+  @@index([lessonId, position])
+  @@map("questions")
+}
+
+model Payment {
+  id           Int           @id @default(autoincrement())
+  userId       Int           @map("user_id")
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId     Int           @map("course_id")
+  course       Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  amount       Int
+  senderNumber String        @map("sender_number")
+  trxId        String        @unique @map("trx_id")
+  status       PaymentStatus @default(pending)
+  adminNote    String        @default("") @map("admin_note")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  reviewedAt   DateTime?     @map("reviewed_at")
+  enrollments  Enrollment[]
+
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
+model Enrollment {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  Int      @map("course_id")
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  paymentId Int?     @map("payment_id")
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, courseId])
+  @@map("enrollments")
+}
+
+model LessonProgress {
+  userId      Int       @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId    Int       @map("lesson_id")
+  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  score       Int       @default(0)
+  attempts    Int       @default(0)
+  completedAt DateTime? @map("completed_at")
+
+  @@id([userId, lessonId])
+  @@index([completedAt])
+  @@map("lesson_progress")
+}
+
+model Setting {
+  key   String @id
+  value String
+
+  @@map("settings")
+}
+
+model LiveClass {
+  id           Int      @id @default(autoincrement())
+  courseId     Int      @map("course_id")
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title        String
+  description  String   @default("")
+  startsAt     DateTime @map("starts_at")
+  durationMin  Int      @default(60) @map("duration_min")
+  meetUrl      String   @map("meet_url")
+  recordingUrl String   @default("") @map("recording_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([courseId, startsAt])
+  @@index([startsAt])
+  @@map("live_classes")
+}
+
+enum MaterialKind {
+  file
+  link
+}
+
+model Material {
+  id         Int          @id @default(autoincrement())
+  courseId   Int          @map("course_id")
+  course     Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonId   Int?         @map("lesson_id")
+  lesson     Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  title      String
+  kind       MaterialKind
+  url        String       @default("")
+  fileName   String       @default("") @map("file_name")
+  mimeType   String       @default("") @map("mime_type")
+  size       Int          @default(0)
+  storageKey String       @default("") @map("storage_key")
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  @@index([courseId, createdAt])
+  @@map("materials")
+}
